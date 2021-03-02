@@ -1,0 +1,117 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.model_selection import learning_curve, StratifiedKFold, RandomizedSearchCV
+from sklearn.pipeline import pipeline
+from sklearn.preprocessing import StandarScaler
+from sklearn.decomposition import PCA
+from sklearn.
+from sklearn.metrics import classification_report
+
+def plot_learning_curve(train_sizes, train_scores, test_scores, title, alpha=0.1):
+    plt.figure(figsize=(8, 5))
+    train_mean = np.mean(train_scores, axis=1)
+    train_std = np.std(train_scores, axis=1)
+    test_mean = np.mean(test_scores, axis=1)
+    test_std = np.std(test_scores, axis=1)
+    plt.plot(train_sizes, train_mean, label='train score', color='blue', marker='o')
+    plt.fill_between(train_sizes, train_mean + train_std,
+                     train_mean - train_std, color='blue', alpha=alpha)
+    plt.plot(train_sizes, test_mean, label='test score', color='red', marker='o')
+
+
+    plt.fill_between(train_sizes, test_mean + test_std, test_mean - test_std, color='red', alpha=alpha)
+    plt.title(title)
+    plt.xlabel('Number of training points')
+    plt.ylabel('F-measure')
+    plt.grid(ls='--')
+    plt.legend(loc='best')
+#         plt.show()
+    
+def Model():
+
+    # Hyperparameters for Logistic Regression
+    LRparams = {
+        "model__class_weight":["balanced", None],
+        'model__multi_class': ['ovr'],
+        "model__penalty" : ["l2","l1"],
+        "model__tol" : [0.0001,0.0002,0.0003],
+        "model__max_iter": [100,200,300],
+        "model__C" : [0.0001, 0.001, 0.1, 1.0, 5.0, 10.0],
+        "model__intercept_scaling": [1, 2, 3, 4, 5],
+        "model__solver":["liblinear", 'saga'],
+    }
+
+    # Hyperparameters for Support Vector Classifiers
+    SVCparams = {
+        'model__kernel': ['linear'], 
+        'model__gamma': [0.0001, 0.001, 0.01, 1.0, 5.0],
+        'model__C': [0.0001, 0.001, 0.01, 1.0],
+        'model__class_weight': ['balanced'],
+        'model__break_ties': [True, False],
+        'model__probability': [True]
+    }
+#     Hyperparameters for Random Forest
+    RFparams = {
+        'model__criterion':['gini','entropy'],
+        'model__n_estimators':[10, 15, 20, 25, 30, 50, 100, 500],
+        'model__max_depth':[None, 2, 5, 10],
+        'model__max_features':['auto', 'sqrt', None],
+        'model__min_impurity_decrease':[0.0, 0.1, 0.5],
+        'model__ccp_alpha':[0.0, 0.1, 0.3],
+        'model__min_samples_leaf':[1,2,3,4,5,6,8],
+        'model__min_samples_split':[1,2,3,4,5,6,7,10],
+        'model__max_samples': [.3, .4, .5, .6, .7, .8, None],
+        'model__n_jobs': [-1],
+        'model__class_weight' : ["balanced", "balanced_subsample"]}
+
+    models = []
+    models.append(('Logistic Regression', LogisticRegression(multi_class='ovr', random_state=42), LRparams,'LR'))
+    models.append(('Support Vector Classifier', SVC(probability=True, random_state=42), SVCparams,'SVC'))
+    models.append(('Random Forest', RandomForestClassifier(random_state=42), RFparams,'RF'))
+    return models
+
+scaler = StandardScaler()
+vs = VarianceThreshold(threshold=(.90*(1 - .90)))
+pca = PCA(n_components=800)
+models = Model()
+cv = StratifiedKFold(n_splits=5, random_state=42)
+result = []
+result1 = []
+        
+for name, model, params, abr in models:
+    pipe = Pipeline([('scaler', scaler), ('vs', vs), ('pca', pca), ('model', model)])
+    rs = RandomizedSearchCV(pipe, param_distributions = params, verbose=0, n_jobs=-1, scoring='roc_auc_ovr', cv = 6, random_state=42)
+    rs.fit(X_train, y_train)
+    result.append((name, rs.best_estimator_))
+    result1.append((rs.best_estimator_))
+    
+train_preds = []
+test_preds = []
+for i, model in enumerate(result):
+    train_preds.append(model[1].predict(X_train))
+    test_preds.append(model[1].predict(X_test))
+    print(model[0]+" Train Scores")
+    print(classification_report(y_train, train_preds[i]))
+    print(model[0]+" Test Scores")
+    print(classification_report(y_test, test_preds[i]))
+
+
+# plt.figure(figsize=(9, 6))
+# fig, axes = plt.subplots(3, 1, figsize=(5, 10))
+    #LR Learning Curve
+train_sizes1, train_scores1, test_scores1 = learning_curve(
+estimator=result1[0], X=X_train, y=y_train,
+train_sizes=np.arange(0.1, 1.1, 0.1), cv=cv, scoring='f1_micro', n_jobs=-1, shuffle=True)
+plot_learning_curve(train_sizes1, train_scores1, test_scores1, title='LR Confusion Matrix')
+    #SVM Learning Curve
+train_sizes2, train_scores2, test_scores2 = learning_curve(
+estimator=result1[1], X=X_train, y=y_train,
+train_sizes=np.arange(0.1, 1.1, 0.1), cv=cv, scoring='f1_micro', n_jobs=-1, shuffle=True)
+plot_learning_curve(train_sizes2, train_scores2, test_scores2, title='SVC Confusion Matrix')
+    #RF Learning Curve
+train_sizes3, train_scores3, test_scores3 = learning_curve(
+estimator=result1[2], X=X_train, y=y_train,
+train_sizes=np.arange(0.1, 1.1, 0.1), cv=cv, scoring='f1_micro', n_jobs=-1, shuffle=True)
+plot_learning_curve(train_sizes3, train_scores3, test_scores3, title='RF Confusion Matrix')
+
+plt.show()
